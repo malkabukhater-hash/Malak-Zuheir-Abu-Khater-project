@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="orbitGrad" x1="64" y1="64" x2="448" y2="448" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#183B56" />
+      <stop offset="45%" stop-color="#0284C7" />
+      <stop offset="80%" stop-color="#2DD4BF" />
+      <stop offset="100%" stop-color="#A9DDF5" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="100%" stop-color="#183B56" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded squircle with safe margin -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
+
+  <!-- Outer orbital ring -->
+  <circle cx="256" cy="256" r="170" stroke="url(#orbitGrad)" stroke-width="20" stroke-linecap="round" stroke-dasharray="850 200" opacity="0.9" />
+
+  <!-- Inner orbital ellipse rotated -->
+  <ellipse cx="256" cy="256" rx="140" ry="70" transform="rotate(-35 256 256)" stroke="#A9DDF5" stroke-width="12" opacity="0.8" />
+  
+  <!-- Interconnected Orbit Nodes (5 modules) -->
+  <!-- WASEL (Marketplace) -->
+  <circle cx="256" cy="86" r="18" fill="#2DD4BF" filter="url(#glow)" />
+  <!-- AOUN (Repair) -->
+  <circle cx="410" cy="210" r="15" fill="#A9DDF5" filter="url(#glow)" />
+  <!-- DEFA (Shelter) -->
+  <circle cx="360" cy="390" r="16" fill="#FBBF24" filter="url(#glow)" />
+  <!-- QATRA (Water) -->
+  <circle cx="150" cy="390" r="18" fill="#38BDF8" filter="url(#glow)" />
+  <!-- MAHARA (Skills) -->
+  <circle cx="100" cy="210" r="15" fill="#EAE5F7" filter="url(#glow)" />
+
+  <!-- Center Core: Stylized Arabic 'م' and Orbit Center -->
+  <circle cx="256" cy="256" r="44" fill="#FFFFFF" />
+  <circle cx="256" cy="256" r="32" fill="#183B56" />
+  <circle cx="256" cy="256" r="16" fill="#2DD4BF" />
+</svg>

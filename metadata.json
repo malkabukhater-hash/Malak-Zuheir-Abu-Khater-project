@@ -1,0 +1,6 @@
+{
+  "name": "MADAR | مَدَار - Smart Community Ecosystem",
+  "description": "Intelligent community ecosystem connecting essential marketplace, repair, shelter, water, and skills with Gaza-ready offline resilience and Eye Comfort mode.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --madar-navy: #183B56;
+    --madar-sky: #A9DDF5;
+    --madar-light-sky: #D9F1FC;
+    --madar-lavender: #EAE5F7;
+    --madar-turquoise: #2DD4BF;
+    --font-ar: 'Tajawal', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-en: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  html[dir="rtl"] {
+    font-family: var(--font-ar);
+  }
+
+  html[dir="ltr"] {
+    font-family: var(--font-en);
+  }
+
+  body {
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+}
+
+/* Eye Comfort Mode Themes */
+html[data-eye-mode="warm"] {
+  filter: sepia(0.28) contrast(0.96) brightness(0.96);
+  background-color: #FBF8F1 !important;
+}
+
+html[data-eye-mode="warm"] body {
+  background-color: #FBF8F1 !important;
+  color: #2D2721 !important;
+}
+
+html[data-eye-mode="dim"] {
+  filter: brightness(0.85) contrast(0.95);
+  background-color: #121A21 !important;
+}
+
+html[data-eye-mode="dim"] body {
+  background-color: #121A21 !important;
+  color: #E2E8F0 !important;
+}
+
+html[data-eye-mode="soft-sky"] {
+  background-color: #F0F9FF !important;
+}
+
+html[data-eye-mode="soft-sky"] body {
+  background-color: #F0F9FF !important;
+  color: #183B56 !important;
+}
+
+html[data-eye-mode="high-contrast"] {
+  filter: contrast(1.25);
+  background-color: #FFFFFF !important;
+}
+
+html[data-eye-mode="high-contrast"] body {
+  background-color: #FFFFFF !important;
+  color: #000000 !important;
+}
+
+/* Text Size Scalers */
+html[data-text-scale="large"] {
+  font-size: 114%;
+}
+
+html[data-text-scale="xlarge"] {
+  font-size: 128%;
+}
+
+/* Reduced Motion Override */
+html.reduced-motion *,
+html.reduced-motion *::before,
+html.reduced-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Reading Focus Mode Container */
+.reading-focus-active {
+  max-width: 48rem !important;
+  margin-inline: auto !important;
+  line-height: 1.85 !important;
+  letter-spacing: 0.01em !important;
+}
+
+/* Low Data Mode indicator and optimizations */
+.low-data-mode img,
+.low-data-mode video {
+  filter: grayscale(0.5);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(24, 59, 86, 0.04);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(24, 59, 86, 0.22);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(24, 59, 86, 0.38);
+}
