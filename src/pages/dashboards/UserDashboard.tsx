@@ -21,10 +21,12 @@ import {
   Phone,
   MapPin,
   Briefcase,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useData } from '../../context/DataContext';
 import { useAuth, malakDefaultUser } from '../../context/AuthContext';
+import { WorkspaceSyncModal } from '../../components/common/WorkspaceSyncModal';
 
 export const UserDashboard: React.FC<{ onNavigate: (page: string, params?: any) => void }> = ({ onNavigate }) => {
   const { isRtl, t } = useLanguage();
@@ -33,6 +35,7 @@ export const UserDashboard: React.FC<{ onNavigate: (page: string, params?: any) 
 
   // Profile Edit Modal State
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
   const [editNameAr, setEditNameAr] = useState(currentUser.nameAr || 'ملاك أبو خاطر');
   const [editNameEn, setEditNameEn] = useState(currentUser.name || 'Malak Abu Khater');
   const [editTitleAr, setEditTitleAr] = useState(currentUser.titleAr || 'مؤسس وصاحب منظومة مَدَار');
@@ -168,6 +171,14 @@ export const UserDashboard: React.FC<{ onNavigate: (page: string, params?: any) 
             >
               <Edit3 className="w-4 h-4 text-[#0284C7]" />
               <span>{isRtl ? 'تعديل بياناتي (عربي / English)' : 'Edit Profile (AR / EN)'}</span>
+            </button>
+
+            <button
+              onClick={() => setShowWorkspaceModal(true)}
+              className="px-4 py-2.5 rounded-2xl bg-white border border-emerald-200 hover:bg-emerald-50 text-emerald-800 font-bold text-xs shadow-xs transition flex items-center gap-1.5"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span>{isRtl ? 'Google Drive و Sheets و Gmail' : 'Google Workspace'}</span>
             </button>
 
             <button
@@ -427,7 +438,7 @@ export const UserDashboard: React.FC<{ onNavigate: (page: string, params?: any) 
                     value={editNeighborhoodAr}
                     onChange={(e) => setEditNeighborhoodAr(e.target.value)}
                     placeholder="دير البلح - الوسطى"
-                    className="w-full p-2.5 rounded-xl border border-gray-200 text-xs focus:outline-hidden focus:border-[#0284C7]"
+                    className="w-full p-2.5 rounded-xl border border-gray-200 text-xs focus:outline-hidden border-[#0284C7]"
                   />
                 </div>
 
@@ -477,6 +488,9 @@ export const UserDashboard: React.FC<{ onNavigate: (page: string, params?: any) 
           </div>
         </div>
       )}
+
+      {/* Workspace Sync Modal for Google Drive, Sheets, Gmail */}
+      <WorkspaceSyncModal isOpen={showWorkspaceModal} onClose={() => setShowWorkspaceModal(false)} />
     </div>
   );
 };

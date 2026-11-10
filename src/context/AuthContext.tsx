@@ -1,5 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
+import {
+  initAuth,
+  googleSignIn,
+  firebaseLogout,
+  getAccessToken,
+  db,
+  testFirestoreConnection,
+} from '../lib/firebase';
+import { User as FirebaseUser } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 interface AuthContextType {
   currentUser: User;
@@ -8,6 +18,14 @@ interface AuthContextType {
   logout: () => void;
   updateProfile: (updates: Partial<User>) => void;
   resetToMalak: () => void;
+
+  // Real Firebase & Google Workspace Auth
+  isGoogleConnected: boolean;
+  googleUser: FirebaseUser | null;
+  googleAccessToken: string | null;
+  signInWithGoogle: () => Promise<void>;
+  logoutGoogle: () => Promise<void>;
+  firestoreReady: boolean;
 }
 
 export const malakDefaultUser: User = {
@@ -101,7 +119,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const saved = localStorage.getItem('madar_auth_user');
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Clear any old mock placeholders (e.g. Abu Omar) and ensure Malak is default
         if (
           !parsed.name ||
           parsed.name.includes('Abu Omar') ||
@@ -119,6 +136,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   });
 
+  const [googleUser, setGoogleUser] = useState<FirebaseUser | null>(null);
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
+  const [isGoogleConnected, setIsGoogleConnected] = useState<boolean>(false);
+  const [firestoreReady, setFirestoreReady] = useState<boolean>(false);
+
+  // Initialize Firebase Auth listener and test Firestore connection
+  useEffect(() => {
+    testFirestoreConnection().then((ready) => setFirestoreReady(ready));
+
+    const unsubscribe = initAuth(
+      async (user, token) => {
+        setGoogleUser(user);
+        setIsGoogleConnected(true);
+        const tok = token || (await getAccessToken());
+        setGoogleAccessToken(tok);
+
+        // Sync or register user in Firestore
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          const snap = await getDoc(userRef);
+          if (snap.exists()) {
+            const data = snap.data() as User;
+            setCurrentUser(data);
+          } else {
+            const isFounder = user.email === 'malkabukhater@gmail.com';
+            const newUser: User = {
+              id: user.uid,
+              name: user.displayName || 'Google User',
+              nameAr: isFounder ? 'ملاك أبو خاطر' : user.displayName || 'مستخدم مسجل',
+              email: user.email || '',
+              role: isFounder ? 'admin' : 'resident',
+              titleAr: isFounder ? 'المؤسس والمشرف العام' : 'عضو مجتمعي موثق',
+              titleEn: isFounder ? 'Founder & Administrator' : 'Verified Community Member',
+              neighborhood: 'Deir al-Balah',
+              neighborhoodAr: 'دير البلح',
+              avatar: user.photoURL || undefined,
+              isVerified: true,
+            };
+            await setDoc(userRef, {
+              ...newUser,
+              createdAt: new Date().toISOString(),
+            });
+            setCurrentUser(newUser);
+          }
+        } catch (err) {
+          console.warn('Could not sync user to Firestore:', err);
+        }
+      },
+      () => {
+        setGoogleUser(null);
+        setGoogleAccessToken(null);
+        setIsGoogleConnected(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
   useEffect(() => {
     try {
       localStorage.setItem('madar_auth_user', JSON.stringify(currentUser));
@@ -128,7 +203,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [currentUser]);
 
   const switchRole = (role: UserRole) => {
-    // If switching role while logged in as Malak, keep Malak's identity but update role
     if (currentUser.email === 'malkabukhater@gmail.com' || currentUser.name.includes('Malak')) {
       setCurrentUser((prev) => ({
         ...prev,
@@ -163,6 +237,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     setCurrentUser(malakDefaultUser);
+    if (isGoogleConnected) {
+      firebaseLogout();
+    }
+  };
+
+  const signInWithGoogleAction = async () => {
+    const result = await googleSignIn();
+    if (result) {
+      setGoogleUser(result.user);
+      setGoogleAccessToken(result.accessToken);
+      setIsGoogleConnected(true);
+    }
+  };
+
+  const logoutGoogleAction = async () => {
+    await firebaseLogout();
+    setGoogleUser(null);
+    setGoogleAccessToken(null);
+    setIsGoogleConnected(false);
   };
 
   const updateProfile = (updates: Partial<User>) => {
@@ -183,7 +276,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, switchRole, login, logout, updateProfile, resetToMalak }}>
+    <AuthContext.Provider
+      value={{
+        currentUser,
+        switchRole,
+        login,
+        logout,
+        updateProfile,
+        resetToMalak,
+        isGoogleConnected,
+        googleUser,
+        googleAccessToken,
+        signInWithGoogle: signInWithGoogleAction,
+        logoutGoogle: logoutGoogleAction,
+        firestoreReady,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

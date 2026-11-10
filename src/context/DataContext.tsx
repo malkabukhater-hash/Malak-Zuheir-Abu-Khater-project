@@ -12,6 +12,15 @@ import {
   OfflineMutation,
   RequestStatus,
 } from '../types';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import {
+  collection,
+  doc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  onSnapshot,
+} from 'firebase/firestore';
 
 interface DataContextType {
   isOnline: boolean;
@@ -105,7 +114,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('madar_low_data', String(lowDataMode));
   }, [lowDataMode]);
 
-  // Bootstrap data from server or localStorage cache
+  // Bootstrap data from server or localStorage cache, and attach Firestore live listeners
   useEffect(() => {
     const loadData = async () => {
       // 1. Load from cache first for instantaneous offline render
@@ -127,7 +136,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('Error reading local cache:', err);
       }
 
-      // 2. Refresh from server if online
+      // 2. Refresh from server bootstrap
       if (navigator.onLine) {
         try {
           const res = await fetch('/api/bootstrap');
@@ -147,6 +156,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         } catch (e) {
           console.warn('Network fetch failed, relying on cached data:', e);
+        }
+
+        // 3. Connect to live Firestore collections for real persistent records
+        try {
+          const fsReqSnap = await getDocs(collection(db, 'requests'));
+          if (!fsReqSnap.empty) {
+            const fsReqs = fsReqSnap.docs.map((d) => d.data() as SmartRequest);
+            setRequests((prev) => {
+              const existingIds = new Set(fsReqs.map((r) => r.id));
+              const nonOverlapping = prev.filter((r) => !existingIds.has(r.id));
+              return [...fsReqs, ...nonOverlapping];
+            });
+          }
+
+          const fsSkillsSnap = await getDocs(collection(db, 'skills'));
+          if (!fsSkillsSnap.empty) {
+            const fsSkills = fsSkillsSnap.docs.map((d) => d.data() as SkillItem);
+            setSkills((prev) => {
+              const existingIds = new Set(fsSkills.map((s) => s.id));
+              const nonOverlapping = prev.filter((s) => !existingIds.has(s.id));
+              return [...fsSkills, ...nonOverlapping];
+            });
+          }
+        } catch (err) {
+          console.warn('Firestore initial query check:', err);
         }
       }
     };
@@ -168,11 +202,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (res.ok) {
-        // Clear synced items
         setOfflineQueue([]);
         localStorage.removeItem('madar_offline_queue');
 
-        // Refresh latest server state
         const refresh = await fetch('/api/bootstrap');
         if (refresh.ok) {
           const freshData = await refresh.json();
@@ -190,7 +222,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Mutations
   const createRequest = async (reqData: Partial<SmartRequest>): Promise<SmartRequest> => {
-    // Calculate urgency score
     let score = 50;
     if (reqData.urgency === 'urgent') score += 40;
     else if (reqData.urgency === 'high') score += 25;
@@ -220,13 +251,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         {
           status: 'New',
           time: new Date().toISOString(),
-          note: navigator.onLine ? 'تم استلام وتوثيق الطلب في منظومة مدار' : 'تم حفظ الطلب محلياً (سيتم الرفع تلقائياً عند توفر الشبكة)',
+          note: navigator.onLine
+            ? 'تم استلام وتوثيق الطلب في منظومة مدار وقاعدة بيانات Firestore'
+            : 'تم حفظ الطلب محلياً (سيتم الرفع تلقائياً عند توفر الشبكة)',
         },
       ],
     };
 
-    // Optimistically update local state immediately
+    // Optimistically update local state
     setRequests((prev) => [newRequest, ...prev]);
+
+    // Save to Firestore
+    try {
+      await setDoc(doc(db, 'requests', newRequest.id), newRequest);
+    } catch (fsErr) {
+      console.warn('Firestore write warning:', fsErr);
+    }
 
     if (navigator.onLine) {
       try {
@@ -244,7 +284,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // If offline or network error, enqueue mutation
+    // Offline queue fallback
     const mutation: OfflineMutation = {
       id: 'mut-' + Date.now(),
       type: 'CREATE_REQUEST',
@@ -258,6 +298,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateRequestStatus = async (id: string, status: RequestStatus, note?: string) => {
+    let updatedRequest: SmartRequest | null = null;
+
     setRequests((prev) =>
       prev.map((r) => {
         if (r.id === id) {
@@ -269,11 +311,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               note: note || `تغيرت حالة الطلب إلى: ${status}`,
             },
           ];
-          return { ...r, status, timeline: newTimeline };
+          updatedRequest = { ...r, status, timeline: newTimeline };
+          return updatedRequest;
         }
         return r;
       })
     );
+
+    // Save to Firestore
+    try {
+      if (updatedRequest) {
+        await updateDoc(doc(db, 'requests', id), {
+          status,
+          timeline: (updatedRequest as SmartRequest).timeline,
+        });
+      }
+    } catch (fsErr) {
+      console.warn('Firestore status update warning:', fsErr);
+    }
 
     if (navigator.onLine) {
       try {
@@ -337,6 +392,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setMarketplaceItems((prev) => [newItem, ...prev]);
+
+    try {
+      await setDoc(doc(db, 'marketplaceItems', newItem.id), newItem);
+    } catch (fsErr) {
+      console.warn('Firestore write warning for marketplace item:', fsErr);
+    }
 
     if (navigator.onLine) {
       try {
@@ -408,7 +469,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // Also auto-create a high-priority request in unified request center
     await createRequest({
       title: `بلاغ مياه: ${issue.location}`,
       module: 'qatra',
@@ -435,7 +495,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       bioEn: skillData.bioEn || '',
       badges: ['مبادر جديد'],
     };
+
     setSkills((prev) => [newSkill, ...prev]);
+
+    try {
+      await setDoc(doc(db, 'skills', newSkill.id), newSkill);
+    } catch (fsErr) {
+      console.warn('Firestore write warning for skill:', fsErr);
+    }
   };
 
   const toggleLowDataMode = () => {

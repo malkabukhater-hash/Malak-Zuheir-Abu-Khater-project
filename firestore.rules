@@ -1,0 +1,188 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Global Helpers
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Role-based access helpers
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'malkabukhater@gmail.com' ||
+        request.auth.token.role == 'admin' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && (
+        request.auth.token.role == role ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role) ||
+        (exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == role)
+      );
+    }
+
+    function isProvider() {
+      return hasRole('provider') || hasRole('freelancer');
+    }
+
+    // Validation Blueprint for User Profiles (Pillar 2)
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'email', 'role']) &&
+        data.keys().hasOnly(['id', 'name', 'nameAr', 'titleAr', 'titleEn', 'bioAr', 'bioEn', 'email', 'role', 'neighborhood', 'neighborhoodAr', 'phone', 'avatar', 'isVerified', 'createdAt']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.email is string && data.email.size() <= 150 &&
+        data.role in ['resident', 'merchant', 'provider', 'freelancer', 'organization', 'admin'];
+    }
+
+    // Validation Blueprint for Mahara Services / Skills
+    function isValidSkill(data) {
+      return data.keys().hasAll(['id', 'titleAr', 'category', 'providerName']) &&
+        data.keys().hasOnly(['id', 'titleAr', 'titleEn', 'providerName', 'providerId', 'providerUid', 'category', 'rate', 'rating', 'reviewsCount', 'neighborhood', 'neighborhoodAr', 'bioAr', 'bioEn', 'badges', 'createdAt']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.titleAr is string && data.titleAr.size() <= 150 &&
+        data.providerName is string && data.providerName.size() <= 100 &&
+        data.category in ['translation', 'education', 'design', 'crafts', 'tech', 'writing', 'engineering'] &&
+        data.rate is string && data.rate.size() <= 100;
+    }
+
+    // Validation Blueprint for Service Requests
+    function isValidRequest(data) {
+      return data.keys().hasAll(['id', 'title', 'module', 'status', 'urgency', 'description']) &&
+        data.keys().hasOnly(['id', 'title', 'module', 'category', 'neighborhood', 'neighborhoodAr', 'status', 'urgency', 'urgencyScore', 'requesterName', 'requesterId', 'requesterUid', 'requesterRole', 'createdAt', 'description', 'assignedTo', 'timeline', 'hasInfants', 'hasSickOrElderly', 'floodedTent']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.title is string && data.title.size() <= 200 &&
+        data.module in ['wasel', 'aoun', 'defa', 'qatra', 'mahara'] &&
+        data.status in ['New', 'Under Review', 'Matched', 'In Progress', 'Completed', 'Cancelled'] &&
+        data.urgency in ['low', 'medium', 'high', 'urgent'] &&
+        data.description is string && data.description.size() <= 2000;
+    }
+
+    // 1. PROFILES & USERS COLLECTIONS (MAHARA & SYSTEM ACCOUNTS)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidId(userId) && isOwner(userId) &&
+        isValidUser(incoming()) && (incoming().role != 'admin' || isAdmin());
+      allow update: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin()) &&
+        isValidUser(incoming()) && incoming().id == existing().id &&
+        (!incoming().diff(existing()).affectedKeys().hasAny(['role']) || isAdmin());
+      allow delete: if isAdmin() || (isSignedIn() && isOwner(userId));
+    }
+
+    match /profiles/{profileId} {
+      allow get: if isValidId(profileId) && (isOwner(profileId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidId(profileId) && isOwner(profileId) &&
+        isValidUser(incoming()) && (incoming().role != 'admin' || isAdmin());
+      allow update: if isSignedIn() && isValidId(profileId) && (isOwner(profileId) || isAdmin()) &&
+        isValidUser(incoming()) && incoming().id == existing().id &&
+        (!incoming().diff(existing()).affectedKeys().hasAny(['role']) || isAdmin());
+      allow delete: if isAdmin() || (isSignedIn() && isOwner(profileId));
+    }
+
+    // 2. SERVICES & SKILLS COLLECTIONS (MAHARA MVP OFFERINGS)
+    match /skills/{skillId} {
+      allow get: if isValidId(skillId);
+      allow list: if true;
+      allow create: if isSignedIn() && isValidId(skillId) && isValidSkill(incoming()) &&
+        (isProvider() || isAdmin() || isOwner(incoming().providerId));
+      allow update: if isSignedIn() && isValidId(skillId) && isValidSkill(incoming()) &&
+        incoming().id == existing().id &&
+        (isAdmin() || (isOwner(existing().providerId) &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['titleAr', 'titleEn', 'category', 'rate', 'neighborhood', 'neighborhoodAr', 'bioAr', 'bioEn'])));
+      allow delete: if isAdmin() || (isSignedIn() && isOwner(existing().providerId));
+    }
+
+    match /services/{serviceId} {
+      allow get: if isValidId(serviceId);
+      allow list: if true;
+      allow create: if isSignedIn() && isValidId(serviceId) && isValidSkill(incoming()) &&
+        (isProvider() || isAdmin() || isOwner(incoming().providerId));
+      allow update: if isSignedIn() && isValidId(serviceId) && isValidSkill(incoming()) &&
+        incoming().id == existing().id &&
+        (isAdmin() || (isOwner(existing().providerId) &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['titleAr', 'titleEn', 'category', 'rate', 'neighborhood', 'neighborhoodAr', 'bioAr', 'bioEn'])));
+      allow delete: if isAdmin() || (isSignedIn() && isOwner(existing().providerId));
+    }
+
+    // 3. REQUESTS COLLECTION (MAHARA TICKETS & SERVICE MATCHING)
+    match /requests/{requestId} {
+      allow get: if isValidId(requestId) && isSignedIn() && (
+        resource.data.requesterId == request.auth.uid ||
+        resource.data.requesterUid == request.auth.uid ||
+        resource.data.assignedTo == request.auth.uid ||
+        isProvider() ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.requesterId == request.auth.uid ||
+        resource.data.requesterUid == request.auth.uid ||
+        resource.data.assignedTo == request.auth.uid ||
+        (isProvider() && resource.data.module == 'mahara') ||
+        isAdmin()
+      );
+      allow create: if isSignedIn() && isValidId(requestId) && isValidRequest(incoming()) &&
+        (incoming().requesterId == request.auth.uid || incoming().requesterUid == request.auth.uid || isAdmin());
+      allow update: if isSignedIn() && isValidId(requestId) && isValidRequest(incoming()) &&
+        incoming().id == existing().id && (
+          isAdmin() ||
+          // Requester editing details while still in initial state
+          ((existing().requesterId == request.auth.uid || existing().requesterUid == request.auth.uid) &&
+           existing().status in ['New', 'Under Review'] &&
+           incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'urgency', 'neighborhood', 'neighborhoodAr'])) ||
+          // Requester cancelling their ticket
+          ((existing().requesterId == request.auth.uid || existing().requesterUid == request.auth.uid) &&
+           incoming().status == 'Cancelled' &&
+           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'timeline'])) ||
+          // Provider / Assignee updating status or timeline notes
+          ((existing().assignedTo == request.auth.uid || isProvider()) &&
+           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'assignedTo', 'timeline']))
+        );
+      allow delete: if isAdmin();
+    }
+
+    // 4. MARKETPLACE ITEMS (WASEL)
+    match /marketplaceItems/{itemId} {
+      allow get: if isValidId(itemId);
+      allow list: if true;
+      allow create: if isSignedIn() && isValidId(itemId) && (hasRole('merchant') || isAdmin());
+      allow update: if isSignedIn() && isValidId(itemId) &&
+        (isAdmin() || (hasRole('merchant') && resource.data.merchantId == request.auth.uid));
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.merchantId == request.auth.uid);
+    }
+
+    // 5. AUDIT LOGS (SECURITY TRAIL)
+    match /auditLogs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidId(logId);
+      allow update, delete: if false;
+    }
+  }
+}

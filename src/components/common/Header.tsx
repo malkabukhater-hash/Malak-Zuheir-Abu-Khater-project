@@ -15,6 +15,7 @@ import {
   Shield,
   Layers,
   Volume2,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useEyeComfort } from '../../context/EyeComfortContext';
@@ -22,6 +23,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { PWAInstallButton } from './PWAInstallButton';
 import { EyeComfortModal } from './EyeComfortModal';
+import { WorkspaceSyncModal } from './WorkspaceSyncModal';
 import { UserRole } from '../../types';
 
 export const Header: React.FC<{ activePage: string; onNavigate: (page: string) => void }> = ({
@@ -30,11 +32,12 @@ export const Header: React.FC<{ activePage: string; onNavigate: (page: string) =
 }) => {
   const { language, setLanguage, isRtl, t } = useLanguage();
   const { settings, speakText, stopSpeaking, isSpeaking } = useEyeComfort();
-  const { currentUser, switchRole } = useAuth();
+  const { currentUser, switchRole, isGoogleConnected } = useAuth();
   const { lowDataMode, toggleLowDataMode } = useData();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [eyeModalOpen, setEyeModalOpen] = useState(false);
+  const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
 
   const navLinks = [
@@ -191,6 +194,21 @@ export const Header: React.FC<{ activePage: string; onNavigate: (page: string) =
               >
                 <Volume2 className="w-3.5 h-3.5 text-[#0284C7]" />
                 <span>{isSpeaking ? (isRtl ? 'إيقاف الصوت' : 'Stop Audio') : (isRtl ? 'صوت هادئ' : 'Soft Voice')}</span>
+              </button>
+
+              {/* Google Workspace Integration Button */}
+              <button
+                onClick={() => setWorkspaceModalOpen(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
+                  isGoogleConnected
+                    ? 'bg-sky-50 text-[#0284C7] border-sky-200'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-sky-50 hover:text-[#0284C7]'
+                }`}
+                title={isRtl ? 'أدوات Google Workspace (Drive, Sheets, Gmail)' : 'Google Workspace Tools (Drive, Sheets, Gmail)'}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-[#0284C7]" />
+                <span className="hidden md:inline">{isRtl ? 'أدوات Google' : 'Workspace'}</span>
+                {isGoogleConnected && <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />}
               </button>
 
               {/* PWA Install */}
@@ -365,6 +383,9 @@ export const Header: React.FC<{ activePage: string; onNavigate: (page: string) =
 
       {/* Global Eye Comfort Modal */}
       <EyeComfortModal isOpen={eyeModalOpen} onClose={() => setEyeModalOpen(false)} />
+
+      {/* Google Workspace Integration Modal */}
+      <WorkspaceSyncModal isOpen={workspaceModalOpen} onClose={() => setWorkspaceModalOpen(false)} />
     </>
   );
 };

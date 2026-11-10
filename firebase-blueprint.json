@@ -1,0 +1,127 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role-based access in MADAR ecosystem",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "nameAr": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "format": "email", "maxLength": 150 },
+        "role": { "type": "string", "enum": ["resident", "merchant", "provider", "freelancer", "organization", "admin"] },
+        "neighborhood": { "type": "string", "maxLength": 80 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "email", "role"]
+    },
+    "Skill": {
+      "title": "Skill",
+      "description": "Mahara freelancer and service provider offering",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "titleAr": { "type": "string", "maxLength": 150 },
+        "titleEn": { "type": "string", "maxLength": 150 },
+        "providerName": { "type": "string", "maxLength": 100 },
+        "providerId": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "enum": ["translation", "education", "design", "crafts", "tech", "writing"] },
+        "rate": { "type": "string", "maxLength": 80 },
+        "rating": { "type": "number" },
+        "reviewsCount": { "type": "number" },
+        "neighborhood": { "type": "string", "maxLength": 80 },
+        "bioAr": { "type": "string", "maxLength": 1000 },
+        "bioEn": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "titleAr", "category", "providerName"]
+    },
+    "Request": {
+      "title": "Request",
+      "description": "Community service or assistance request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "module": { "type": "string", "enum": ["wasel", "aoun", "defa", "qatra", "mahara"] },
+        "category": { "type": "string", "maxLength": 80 },
+        "neighborhood": { "type": "string", "maxLength": 80 },
+        "status": { "type": "string", "enum": ["New", "Under Review", "Matched", "In Progress", "Completed", "Cancelled"] },
+        "urgency": { "type": "string", "enum": ["low", "medium", "high", "urgent"] },
+        "urgencyScore": { "type": "number" },
+        "requesterName": { "type": "string", "maxLength": 100 },
+        "requesterId": { "type": "string", "maxLength": 128 },
+        "requesterRole": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "assignedTo": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "title", "module", "status", "urgency", "description"]
+    },
+    "MarketplaceItem": {
+      "title": "MarketplaceItem",
+      "description": "Essential product item listed on Wasel",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "titleAr": { "type": "string", "maxLength": 150 },
+        "titleEn": { "type": "string", "maxLength": 150 },
+        "category": { "type": "string", "enum": ["solar", "water-tools", "shelter", "cooking", "health", "food"] },
+        "price": { "type": "number" },
+        "currency": { "type": "string", "enum": ["ILS", "USD"] },
+        "merchantId": { "type": "string", "maxLength": 128 },
+        "merchantName": { "type": "string", "maxLength": 100 },
+        "neighborhood": { "type": "string", "maxLength": 80 },
+        "availableQty": { "type": "number" },
+        "isAvailable": { "type": "boolean" },
+        "descriptionAr": { "type": "string", "maxLength": 1500 },
+        "descriptionEn": { "type": "string", "maxLength": 1500 }
+      },
+      "required": ["id", "titleAr", "category", "price", "merchantName"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "System event audit log record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "action": { "type": "string", "maxLength": 100 },
+        "actionAr": { "type": "string", "maxLength": 100 },
+        "actor": { "type": "string", "maxLength": 100 },
+        "timestamp": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "action", "actor", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and account data"
+    },
+    "/profiles/{profileId}": {
+      "schema": "User",
+      "description": "User public and authenticated profiles for MAHARA MVP"
+    },
+    "/skills/{skillId}": {
+      "schema": "Skill",
+      "description": "Mahara freelancer skills directory"
+    },
+    "/services/{serviceId}": {
+      "schema": "Skill",
+      "description": "Mahara service provider catalog offerings"
+    },
+    "/requests/{requestId}": {
+      "schema": "Request",
+      "description": "Smart requests and service orders"
+    },
+    "/marketplaceItems/{itemId}": {
+      "schema": "MarketplaceItem",
+      "description": "Wasel marketplace essential supplies"
+    },
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Security and administrative audit logs"
+    }
+  }
+}

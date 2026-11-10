@@ -4,6 +4,16 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import { sqlDb } from './src/db/index.ts';
+import {
+  users as usersTable,
+  requests as requestsTable,
+  skills as skillsTable,
+  auditLogs as auditLogsTable
+} from './src/db/schema.ts';
+import { eq } from 'drizzle-orm';
+import { getOrCreateUser } from './src/db/users.ts';
+import { requireAuth, type AuthRequest } from './src/middleware/auth.ts';
 
 dotenv.config();
 
@@ -594,9 +604,41 @@ async function startServer() {
       founder: 'Malak',
       version: '1.0.0',
       aiConfigured: !!process.env.GEMINI_API_KEY,
-      storage: 'Persistent JSON Store (.data/db.json)',
+      storage: 'PostgreSQL (Cloud SQL europe-west2) + Firestore + Local Cache',
+      cloudSqlEnabled: !!process.env.SQL_HOST,
       serverTime: new Date().toISOString()
     });
+  });
+
+  // Cloud SQL & Auth Endpoints
+  app.get('/api/sql/users', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const allUsers = await sqlDb.select().from(usersTable);
+      res.json({ users: allUsers });
+    } catch (error: any) {
+      console.error('Failed to fetch Cloud SQL users:', error);
+      res.status(500).json({ error: error.message || 'Database query failed' });
+    }
+  });
+
+  app.post('/api/sql/users/sync', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      const { name, nameAr, role } = req.body || {};
+      const user = await getOrCreateUser(
+        req.user.uid,
+        req.user.email || '',
+        name || '',
+        nameAr || '',
+        role || 'resident'
+      );
+      res.json({ success: true, user });
+    } catch (error: any) {
+      console.error('Failed to sync user to Cloud SQL:', error);
+      res.status(500).json({ error: error.message || 'Failed to sync user' });
+    }
   });
 
   // 2. Full state dump for offline caching
@@ -644,6 +686,23 @@ async function startServer() {
       timestamp: new Date().toISOString()
     });
 
+    if (sqlDb) {
+      sqlDb.insert(requestsTable).values({
+        requestId: newReq.id,
+        title: newReq.title,
+        module: newReq.module || 'mahara',
+        category: newReq.category || 'general',
+        neighborhood: newReq.neighborhood || 'Deir al-Balah',
+        neighborhoodAr: newReq.neighborhoodAr || 'دير البلح',
+        status: newReq.status || 'New',
+        urgency: newReq.urgency || 'medium',
+        urgencyScore: newReq.urgencyScore || 50,
+        requesterName: newReq.requesterName || 'عضو مجتمعي',
+        requesterRole: newReq.requesterRole || 'resident',
+        description: newReq.description || '',
+      }).catch((err) => console.warn('SQL request sync notice:', err?.message));
+    }
+
     saveDatabase(db);
     res.status(201).json(newReq);
   });
@@ -667,11 +726,111 @@ async function startServer() {
           note: req.body.statusNote || `تغيرت حالة الطلب إلى: ${req.body.status}`
         }
       ];
+
+      if (sqlDb) {
+        sqlDb.update(requestsTable).set({
+          status: req.body.status,
+        }).where(eq(requestsTable.requestId, id)).catch((err) => console.warn('SQL status update notice:', err?.message));
+      }
     }
 
     db.requests[index] = updated;
     saveDatabase(db);
     res.json(updated);
+  });
+
+  // 3.1. Mahara Skills Directory
+  app.get('/api/skills', (req, res) => {
+    res.json(db.skills || []);
+  });
+
+  app.post('/api/skills', (req, res) => {
+    const newSkill = {
+      id: 'skill-' + Date.now(),
+      titleAr: req.body.titleAr || 'خدمة مهنية جديدة',
+      titleEn: req.body.titleEn || req.body.titleAr || 'New Professional Service',
+      providerName: req.body.providerName || 'مستقل مدار',
+      category: req.body.category || 'tech',
+      rate: req.body.rate || 'أجر رمزي أو تبادل خبرات',
+      rating: 5.0,
+      reviewsCount: 1,
+      neighborhood: req.body.neighborhood || 'Deir al-Balah',
+      neighborhoodAr: req.body.neighborhoodAr || 'دير البلح',
+      bioAr: req.body.bioAr || '',
+      bioEn: req.body.bioEn || '',
+      badges: req.body.badges || ['مبادر جديد'],
+      createdAt: new Date().toISOString()
+    };
+
+    if (!db.skills) db.skills = [];
+    db.skills.unshift(newSkill);
+
+    if (sqlDb) {
+      sqlDb.insert(skillsTable).values({
+        skillId: newSkill.id,
+        titleAr: newSkill.titleAr,
+        titleEn: newSkill.titleEn,
+        providerName: newSkill.providerName,
+        category: newSkill.category,
+        rate: newSkill.rate,
+        rating: 5.0,
+        reviewsCount: 1,
+        neighborhood: newSkill.neighborhood,
+        neighborhoodAr: newSkill.neighborhoodAr,
+        bioAr: newSkill.bioAr,
+        bioEn: newSkill.bioEn,
+      }).catch((err) => console.warn('SQL skill sync notice:', err?.message));
+    }
+
+    db.auditLogs.unshift({
+      id: 'log-' + Date.now(),
+      action: 'Skill Listing Created',
+      actionAr: `تم إدراج مهارة جديدة (${newSkill.titleAr}) بواسطة ${newSkill.providerName}`,
+      actor: newSkill.providerName,
+      timestamp: new Date().toISOString()
+    });
+
+    saveDatabase(db);
+    res.status(201).json(newSkill);
+  });
+
+  app.delete('/api/skills/:id', (req, res) => {
+    const { id } = req.params;
+    if (db.skills) {
+      db.skills = db.skills.filter((s: any) => s.id !== id);
+      saveDatabase(db);
+    }
+    if (sqlDb) {
+      sqlDb.delete(skillsTable).where(eq(skillsTable.skillId, id)).catch(() => {});
+    }
+    res.json({ success: true, id });
+  });
+
+  // Moderation and Compliance Endpoints
+  app.post('/api/moderation/report', (req, res) => {
+    const { targetId, targetType, reason, reporterName } = req.body;
+    db.auditLogs.unshift({
+      id: 'log-' + Date.now(),
+      action: 'Community Report Logged',
+      actionAr: `تم تسجيل بلاغ مجتمعي عن ${targetType}: #${targetId} (السبب: ${reason})`,
+      actor: reporterName || 'Community Member',
+      timestamp: new Date().toISOString()
+    });
+    saveDatabase(db);
+    res.json({ success: true, message: 'Report received and forwarded to admin moderation queue' });
+  });
+
+  app.post('/api/user/delete-request', (req, res) => {
+    const { userEmail, reason } = req.body;
+    db.auditLogs.unshift({
+      id: 'log-' + Date.now(),
+      action: 'Account Deletion Requested',
+      actionAr: `طلب حذف حساب نهائي للمستخدم: ${userEmail} (السبب: ${reason || 'طلب المستخدم'})`,
+      actor: userEmail || 'User',
+      timestamp: new Date().toISOString()
+    });
+    saveDatabase(db);
+    res.json({ success: true, message: 'Account deletion request queued securely for GDPR/privacy compliance' });
   });
 
   // 4. Marketplace items
